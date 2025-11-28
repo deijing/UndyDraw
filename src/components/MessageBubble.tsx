@@ -4,7 +4,9 @@ import remarkGfm from 'remark-gfm';
 import { ChatMessage, Part } from '../types';
 import { User, Sparkles, ChevronDown, ChevronRight, BrainCircuit, Trash2, RotateCcw, Download } from 'lucide-react';
 import { useUiStore } from '../store/useUiStore';
+import { useAppStore } from '../store/useAppStore';
 import { downloadImage, openImageInNewTab } from '../utils/imageUtils';
+import { GenerationProgress } from './GenerationProgress';
 
 interface Props {
   message: ChatMessage;
@@ -145,6 +147,13 @@ export const MessageBubble: React.FC<Props> = ({ message, isLast, isGenerating, 
   const [showActions, setShowActions] = useState(false);
   const actionsDisabled = isGenerating;
   const { showDialog } = useUiStore();
+  // 使用selector只订阅generationProgress，避免不必要的重渲染
+  const generationProgress = useAppStore(state => state.generationProgress);
+
+  // 判断是否显示进度条
+  const shouldShowProgress = !isUser &&
+    generationProgress.messageId === message.id &&
+    generationProgress.status !== 'idle';
 
   const handleDelete = () => {
     showDialog({
@@ -265,11 +274,18 @@ export const MessageBubble: React.FC<Props> = ({ message, isLast, isGenerating, 
           }`}
         >
           {groupedParts.map((item, i) => renderContent(item, i))}
-          
+
           {message.isError && (
              <div className="mt-2 text-xs text-red-300 font-medium">
                 生成响应失败。请检查您的 API Key 或网络连接。
              </div>
+          )}
+
+          {shouldShowProgress && (
+            <GenerationProgress
+              progress={generationProgress.value}
+              status={generationProgress.status as 'running' | 'done' | 'error'}
+            />
           )}
         </div>
         

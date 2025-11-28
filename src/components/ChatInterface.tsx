@@ -24,13 +24,17 @@ export const ChatInterface: React.FC = () => {
     setLoading,
     deleteMessage,
     sliceMessages,
-    fetchBalance
+    fetchBalance,
+    setGenerationProgress,
+    resetGenerationProgress,
   } = useAppStore();
-  
+
   const [showArcade, setShowArcade] = useState(false);
   const [isExiting, setIsExiting] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const progressTimerRef = useRef<number | null>(null);
+  const chunkCountRef = useRef(0);
 
   useEffect(() => {
     if (isLoading) {
@@ -60,6 +64,98 @@ export const ChatInterface: React.FC = () => {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages, isLoading, showArcade]);
+
+  // 组件卸载时清理资源
+  useEffect(() => {
+    return () => {
+      // 清理计时器
+      if (progressTimerRef.current) {
+        clearInterval(progressTimerRef.current);
+      }
+      // 取消进行中的请求
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      // 重置进度状态
+      resetGenerationProgress();
+    };
+  }, [resetGenerationProgress]);
+
+  // 清理进度计时器
+  const clearProgressTimer = () => {
+    if (progressTimerRef.current) {
+      clearInterval(progressTimerRef.current);
+      progressTimerRef.current = null;
+    }
+  };
+
+  // 启动流式进度
+  const startStreamProgress = (jobId: string, messageId: string) => {
+    chunkCountRef.current = 0;
+    setGenerationProgress({
+      jobId,
+      messageId,
+      mode: 'stream',
+      value: 0.05,
+      status: 'running',
+    });
+  };
+
+  // 更新流式进度
+  const updateStreamProgress = (jobId: string) => {
+    const { generationProgress } = useAppStore.getState();
+    if (generationProgress.jobId !== jobId) return;
+
+    chunkCountRef.current += 1;
+    // 基于chunk数量估算进度，最多到98%
+    const estimated = 0.1 + Math.min(chunkCountRef.current / 50, 1) * 0.88;
+    setGenerationProgress({ value: Math.min(0.98, estimated) });
+  };
+
+  // 启动非流式进度（基于时间模拟）
+  const startNonStreamProgress = (jobId: string, messageId: string) => {
+    clearProgressTimer();
+    setGenerationProgress({
+      jobId,
+      messageId,
+      mode: 'non-stream',
+      value: 0.05,
+      status: 'running',
+    });
+
+    // 使用计时器模拟进度增长，缓慢增长到90%
+    progressTimerRef.current = window.setInterval(() => {
+      const { generationProgress } = useAppStore.getState();
+      if (generationProgress.jobId !== jobId) {
+        clearProgressTimer();
+        return;
+      }
+      // 缓慢增长，越接近90%增长越慢
+      const nextValue = Math.min(0.9, generationProgress.value + (0.9 - generationProgress.value) * 0.15);
+      setGenerationProgress({ value: nextValue });
+    }, 400);
+  };
+
+  // 完成进度
+  const finishProgress = (jobId: string, status: 'done' | 'error') => {
+    const { generationProgress } = useAppStore.getState();
+    if (generationProgress.jobId !== jobId) return;
+
+    clearProgressTimer();
+    setGenerationProgress({
+      value: status === 'done' ? 1 : generationProgress.value,
+      status,
+    });
+
+    // 成功时，短暂显示100%后重置
+    if (status === 'done') {
+      setTimeout(() => {
+        if (useAppStore.getState().generationProgress.jobId === jobId) {
+          resetGenerationProgress();
+        }
+      }, 600);
+    }
+  };
 
   const handleSend = async (text: string, attachments: Attachment[]) => {
     if (!apiKey) return;
@@ -102,9 +198,12 @@ export const ChatInterface: React.FC = () => {
       parts: [], // Start empty
       timestamp: Date.now()
     };
-    
+
     // Add Placeholder Model Message to Store
     addMessage(modelMessage);
+
+    // 生成jobId用于追踪进度
+    const jobId = `${Date.now()}`;
 
     try {
       // Prepare images for service
@@ -120,6 +219,8 @@ export const ChatInterface: React.FC = () => {
       let isThinking = false;
 
       if (settings.streamResponse) {
+          // 启动流式进度
+          startStreamProgress(jobId, modelMessageId);
           const stream = streamGeminiResponse(
             apiKey,
             history, 
@@ -130,6 +231,9 @@ export const ChatInterface: React.FC = () => {
           );
 
           for await (const chunk of stream) {
+              // 更新流式进度
+              updateStreamProgress(jobId);
+
               // Check if currently generating thought
               const lastPart = chunk.modelParts[chunk.modelParts.length - 1];
               if (lastPart && lastPart.thought) {
@@ -149,7 +253,12 @@ export const ChatInterface: React.FC = () => {
               thinkingDuration = (Date.now() - startTime) / 1000;
               updateLastMessage(useAppStore.getState().messages.slice(-1)[0].parts, false, thinkingDuration);
           }
+
+          // 完成流式进度
+          finishProgress(jobId, 'done');
       } else {
+          // 启动非流式进度
+          startNonStreamProgress(jobId, modelMessageId);
           const result = await generateContent(
             apiKey,
             history, 
@@ -170,6 +279,9 @@ export const ChatInterface: React.FC = () => {
           
           const hasThought = result.modelParts.some(p => p.thought);
           updateLastMessage(result.modelParts, false, hasThought ? totalDuration : undefined);
+
+          // 完成非流式进度
+          finishProgress(jobId, 'done');
       }
 
       // 收集生成的图片到历史记录
@@ -193,10 +305,11 @@ export const ChatInterface: React.FC = () => {
     } catch (error: any) {
       if (error.name === 'AbortError' || abortControllerRef.current?.signal.aborted) {
         console.log("用户已停止生成");
+        finishProgress(jobId, 'error');
         return;
       }
       console.error("生成失败", error);
-      
+
       let errorText = "生成失败。请检查您的网络和 API Key。";
       if (error.message) {
           errorText = `Error: ${error.message}`;
@@ -205,9 +318,13 @@ export const ChatInterface: React.FC = () => {
       // Update the placeholder message with error text and flag
       updateLastMessage([{ text: errorText }], true);
 
+      // 标记进度为错误状态
+      finishProgress(jobId, 'error');
+
     } finally {
       setLoading(false);
       abortControllerRef.current = null;
+      clearProgressTimer();
       // 每次生成结束后静默刷新余额
       fetchBalance();
     }

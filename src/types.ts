@@ -59,3 +59,14 @@ export interface PromptItem {
   mode: 'edit' | 'generate';
   category: string;
 }
+
+export type GenerationMode = 'stream' | 'non-stream';
+export type GenerationStatus = 'idle' | 'running' | 'done' | 'error';
+
+export interface GenerationProgress {
+  jobId: string | null;
+  messageId: string | null;
+  value: number; // 0-1
+  mode: GenerationMode | null;
+  status: GenerationStatus;
+}

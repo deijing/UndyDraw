@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage, StateStorage } from 'zustand/middleware';
 import { get as getVal, set as setVal, del as delVal } from 'idb-keyval';
 import { fetchBalance, BalanceInfo } from '../services/balanceService';
-import { AppSettings, ChatMessage, Part, ImageHistoryItem } from '../types';
+import { AppSettings, ChatMessage, Part, ImageHistoryItem, GenerationProgress } from '../types';
 import { createThumbnail } from '../utils/imageUtils';
 
 // Custom IndexedDB storage
@@ -28,6 +28,7 @@ interface AppState {
   inputText: string; // Global input text state
   balance: BalanceInfo | null;
   installPrompt: any | null; // PWA Install Prompt Event
+  generationProgress: GenerationProgress;
 
   setInstallPrompt: (prompt: any) => void;
   setApiKey: (key: string) => void;
@@ -46,6 +47,8 @@ interface AppState {
   removeApiKey: () => void;
   deleteMessage: (id: string) => void;
   sliceMessages: (index: number) => void;
+  setGenerationProgress: (progress: Partial<GenerationProgress>) => void;
+  resetGenerationProgress: () => void;
 }
 
 export const useAppStore = create<AppState>()(
@@ -69,6 +72,13 @@ export const useAppStore = create<AppState>()(
       inputText: '',
       balance: null,
       installPrompt: null,
+      generationProgress: {
+        jobId: null,
+        messageId: null,
+        value: 0,
+        mode: null,
+        status: 'idle',
+      },
 
       setInstallPrompt: (prompt) => set({ installPrompt: prompt }),
       setApiKey: (key) => set({ apiKey: key }),
@@ -259,6 +269,25 @@ export const useAppStore = create<AppState>()(
         set((state) => ({
           messages: state.messages.slice(0, index + 1),
         })),
+
+      setGenerationProgress: (progress) =>
+        set((state) => ({
+          generationProgress: {
+            ...state.generationProgress,
+            ...progress,
+          },
+        })),
+
+      resetGenerationProgress: () =>
+        set({
+          generationProgress: {
+            jobId: null,
+            messageId: null,
+            value: 0,
+            mode: null,
+            status: 'idle',
+          },
+        }),
     }),
     {
       name: 'gemini-pro-storage',
