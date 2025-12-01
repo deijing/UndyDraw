@@ -7,6 +7,8 @@ export interface AppSettings {
   customEndpoint?: string;
   modelName?: string;
   theme: 'light' | 'dark' | 'system';
+  isPro: boolean;
+  sendWithModifier: boolean; // true: Cmd/Ctrl+Enter 发送, false: Enter 发送
 }
 
 export interface Part {

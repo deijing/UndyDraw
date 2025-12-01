@@ -14,7 +14,7 @@ interface Props {
 }
 
 export const InputArea: React.FC<Props> = ({ onSend, onStop, onOpenArcade, isArcadeOpen, disabled }) => {
-  const { inputText, setInputText } = useAppStore();
+  const { inputText, setInputText, settings } = useAppStore();
   const { togglePromptLibrary, isPromptLibraryOpen } = useUiStore();
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [isDragging, setIsDragging] = useState(false);
@@ -27,9 +27,27 @@ export const InputArea: React.FC<Props> = ({ onSend, onStop, onOpenArcade, isArc
     // Check if device is likely mobile/tablet based on screen width
     const isMobile = window.innerWidth < 768;
 
-    if (e.key === 'Enter' && !e.shiftKey && !isMobile) {
-      e.preventDefault();
-      handleSubmit();
+    // 如果正在使用输入法（IME），不处理 Enter 键
+    // keyCode 229 是 IME 输入中的标志，isComposing 是标准属性
+    if ((e as any).isComposing || e.keyCode === 229) {
+      return;
+    }
+
+    if (e.key === 'Enter' && !isMobile) {
+      if (settings.sendWithModifier) {
+        // 需要 Cmd/Ctrl+Enter 发送
+        if (e.metaKey || e.ctrlKey) {
+          e.preventDefault();
+          handleSubmit();
+        }
+        // 否则让 Enter 正常换行
+      } else {
+        // Enter 发送，Shift+Enter 换行
+        if (!e.shiftKey) {
+          e.preventDefault();
+          handleSubmit();
+        }
+      }
     }
   };
 
@@ -142,11 +160,11 @@ export const InputArea: React.FC<Props> = ({ onSend, onStop, onOpenArcade, isArc
 
   // 监听输入变化，检测 /t 触发
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const value = e.target.value;
+    const value = e.currentTarget.value;
     setInputText(value);
 
     // 检测 /t 触发（结尾是 /t 或 /t 后面跟着空格）
-    if (value.endsWith('/t') || value.match(/\/t\s/)) {
+    if (value.endsWith('/t') || value.match(/\/t\s*$/)) {
       setIsQuickPickerOpen(true);
     }
   };
@@ -154,7 +172,7 @@ export const InputArea: React.FC<Props> = ({ onSend, onStop, onOpenArcade, isArc
   // 处理快速选择器选择
   const handleQuickPickerSelect = (prompt: string) => {
     // 替换 /t 为实际提示词
-    const newText = inputText.replace(/\/t\s*$/, prompt);
+    const newText = inputText.replace(/\/t\s*/g, prompt);
     setInputText(newText);
     setIsQuickPickerOpen(false);
 
@@ -168,7 +186,7 @@ export const InputArea: React.FC<Props> = ({ onSend, onStop, onOpenArcade, isArc
 
         {/* Preview Area */}
         {attachments.length > 0 && (
-          <div className="flex gap-3 overflow-x-auto pb-3 mb-2">
+          <div className="flex gap-3 overflow-x-auto pt-3 pb-3 px-3 mb-2">
             {attachments.map((att, i) => (
               <div key={i} className="relative h-20 w-20 shrink-0 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 group">
                 <img
@@ -188,7 +206,7 @@ export const InputArea: React.FC<Props> = ({ onSend, onStop, onOpenArcade, isArc
         )}
 
         <div
-          className={`relative flex items-end gap-1 rounded-2xl bg-gray-50 dark:bg-gray-800 p-2 shadow-inner ring-1 transition-all duration-200 ${
+          className={`relative flex flex-wrap md:flex-nowrap items-end gap-1 rounded-2xl bg-gray-50 dark:bg-gray-800 p-2 shadow-inner ring-1 transition-all duration-200 ${
             isDragging
               ? 'ring-2 ring-blue-500 bg-blue-50 dark:bg-blue-900/20'
               : 'ring-gray-200 dark:ring-gray-700/50 focus-within:ring-2 focus-within:ring-blue-500/50'
@@ -258,15 +276,15 @@ export const InputArea: React.FC<Props> = ({ onSend, onStop, onOpenArcade, isArc
             onChange={handleInputChange}
             onKeyDown={handleKeyDown}
             disabled={disabled}
-            placeholder="描述一张图片..."
-            className="mb-1 max-h-[200px] min-h-10 w-full resize-none bg-transparent py-2.5 text-base text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none disabled:opacity-50 field-sizing-content"
+            placeholder="描述一张图片或问一个问题......"
+            className="mb-1 max-h-[200px] min-h-10 w-full md:w-full order-first md:order-0 resize-none bg-transparent py-2.5 text-base text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none disabled:opacity-50 field-sizing-content"
             rows={1}
           />
 
           {disabled ? (
             <button
               onClick={onStop}
-              className="mb-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-500 text-white shadow-lg shadow-red-500/20 hover:bg-red-600 transition"
+              className="mb-1 ml-auto md:ml-0 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-500 text-white shadow-lg shadow-red-500/20 hover:bg-red-600 transition"
               title="停止生成"
             >
               <Square className="h-4 w-4 fill-current" />
@@ -275,7 +293,7 @@ export const InputArea: React.FC<Props> = ({ onSend, onStop, onOpenArcade, isArc
             <button
               onClick={handleSubmit}
               disabled={!inputText.trim() && attachments.length === 0}
-              className="mb-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white shadow-lg shadow-blue-600/20 hover:bg-blue-500 disabled:opacity-50 disabled:bg-gray-200 dark:disabled:bg-gray-700 disabled:shadow-none transition"
+              className="mb-1 ml-auto md:ml-0 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white shadow-lg shadow-blue-600/20 hover:bg-blue-500 disabled:opacity-50 disabled:bg-gray-200 dark:disabled:bg-gray-700 disabled:shadow-none transition"
             >
               <Send className="h-5 w-5" />
             </button>
@@ -283,10 +301,14 @@ export const InputArea: React.FC<Props> = ({ onSend, onStop, onOpenArcade, isArc
         </div>
         <div className="mt-2 text-center text-xs text-gray-400 dark:text-gray-500">
            <span className="hidden sm:inline">
-             回车发送,Shift + 回车换行。支持粘贴、拖拽或点击上传最多 14 张参考图片。输入 <span className="font-mono text-purple-600 dark:text-purple-400">/t</span> 快速选择提示词。
+             {settings.sendWithModifier 
+               ? `${navigator.platform.includes('Mac') ? '⌘' : 'Ctrl'}+回车发送，回车换行。`
+               : '回车发送，Shift+回车换行。'
+             }
+             支持粘贴、拖拽或点击上传最多 14 张参考图片。输入 <span className="font-mono text-purple-600 dark:text-purple-400">/t</span> 快速选择提示词。
            </span>
            <span className="sm:hidden">
-             点击发送按钮生成图片。支持上传最多 14 张参考图片。输入 <span className="font-mono text-purple-600 dark:text-purple-400">/t</span> 快速选择提示词。
+             点击发送按钮生成图片。支持上传最多 14 张参考图片。
            </span>
         </div>
       </div>

@@ -238,7 +238,7 @@ http://localhost:3000/?endpoint=https://my-proxy.com&model=gemini-2.0-flash
 
 ## 📄 License
 
-MIT
+AGPL-3.0
 
 ## 🙏 致谢
 

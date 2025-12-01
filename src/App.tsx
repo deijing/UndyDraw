@@ -16,7 +16,7 @@ const PromptLibraryPanel = lazyWithRetry(() => import('./components/PromptLibrar
 
 const App: React.FC = () => {
   const { apiKey, setApiKey, settings, updateSettings, isSettingsOpen, toggleSettings, imageHistory, balance, fetchBalance, installPrompt, setInstallPrompt } = useAppStore();
-  const { togglePromptLibrary, isPromptLibraryOpen } = useUiStore();
+  const { togglePromptLibrary, isPromptLibraryOpen, showDialog, addToast } = useUiStore();
 
   useEffect(() => {
     const handleBeforeInstallPrompt = (e: Event) => {
@@ -80,15 +80,48 @@ const App: React.FC = () => {
     const urlEndpoint = params.get('endpoint');
     const urlModel = params.get('model');
 
-    if (urlEndpoint || urlModel) {
-      updateSettings({
-        ...(urlEndpoint ? { customEndpoint: urlEndpoint } : {}),
-        ...(urlModel ? { modelName: urlModel } : {}),
-      });
-    }
+    // Check if parameters are actually different from current settings
+    const isDifferent =
+        (urlApiKey && urlApiKey !== apiKey) ||
+        (urlEndpoint && urlEndpoint !== settings.customEndpoint) ||
+        (urlModel && urlModel !== settings.modelName);
 
-    if (urlApiKey) {
-      setApiKey(urlApiKey);
+    if ((urlApiKey || urlEndpoint || urlModel) && isDifferent) {
+        let message = "检测到 URL 中包含新的配置参数：\n\n";
+        if (urlApiKey && urlApiKey !== apiKey) message += `- API Key: (已隐藏)\n`;
+        if (urlEndpoint && urlEndpoint !== settings.customEndpoint) message += `- 接口地址: ${urlEndpoint}\n`;
+        if (urlModel && urlModel !== settings.modelName) message += `- 模型: ${urlModel}\n`;
+        
+        message += "\n是否应用这些设置？这将覆盖您当前的配置。";
+
+        showDialog({
+            type: 'confirm',
+            title: '应用外部配置',
+            message: message,
+            confirmLabel: '应用并保存',
+            onConfirm: () => {
+                if (urlEndpoint || urlModel) {
+                    updateSettings({
+                        ...(urlEndpoint ? { customEndpoint: urlEndpoint } : {}),
+                        ...(urlModel ? { modelName: urlModel } : {}),
+                    });
+                }
+            
+                if (urlApiKey) {
+                    setApiKey(urlApiKey);
+                }
+
+                // Clean up URL
+                const newUrl = window.location.pathname;
+                window.history.replaceState({}, '', newUrl);
+                
+                addToast('配置已更新', 'success');
+            }
+        });
+    } else if (urlApiKey || urlEndpoint || urlModel) {
+        // If parameters exist but are same as current, just clean up URL silently
+        const newUrl = window.location.pathname;
+        window.history.replaceState({}, '', newUrl);
     }
   }, []);
 

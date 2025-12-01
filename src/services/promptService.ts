@@ -1,6 +1,7 @@
 import { PromptItem } from '../types';
 
-const PROMPT_API_URL = 'https://raw.githubusercontent.com/glidea/banana-prompt-quicker/main/prompts.json';
+const GITHUB_PROMPT_URL = 'https://raw.githubusercontent.com/glidea/banana-prompt-quicker/main/prompts.json';
+const API_PROMPT_URL = '/api/prompts';
 const CACHE_KEY = 'prompt_library_cache';
 const CACHE_DURATION = 24 * 60 * 60 * 1000; // 24小时
 
@@ -21,7 +22,16 @@ export async function fetchPrompts(): Promise<PromptItem[]> {
     }
 
     // 缓存过期或不存在,从 API 获取
-    const response = await fetch(PROMPT_API_URL);
+    let response;
+    try {
+      // 优先尝试使用 Vercel Edge Function 代理 (国内访问更快)
+      response = await fetch(API_PROMPT_URL);
+      if (!response.ok) throw new Error('API request failed');
+    } catch (e) {
+      console.warn('Failed to fetch from API proxy, falling back to GitHub direct link:', e);
+      // 如果 API 失败 (例如在本地开发环境且未配置代理, 或者 API 挂了), 回退到直接请求 GitHub
+      response = await fetch(GITHUB_PROMPT_URL);
+    }
 
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
@@ -130,7 +140,7 @@ function isValidPromptItem(item: any): item is PromptItem {
  */
 export function getCategories(prompts: PromptItem[]): string[] {
   const categories = new Set<string>();
-  prompts.forEach(p => categories.add(p.category));
+  prompts.forEach(p => { categories.add(p.category); });
   return ['全部', ...Array.from(categories).sort()];
 }
 
