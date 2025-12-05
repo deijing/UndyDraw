@@ -38,15 +38,6 @@
       ]
     },
     {
-      "source": "/([^/]+\\.(ico|png|jpg|jpeg|gif|svg|webp|avif|woff|woff2|ttf|eot))",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "public, max-age=2592000, immutable"
-        }
-      ]
-    },
-    {
       "source": "/(index\\.html|)",
       "headers": [
         {
