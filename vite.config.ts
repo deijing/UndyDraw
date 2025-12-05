@@ -10,6 +10,13 @@ export default defineConfig(({ mode }) => {
       server: {
         port: 3000,
         host: '0.0.0.0',
+        proxy: {
+          '/api': {
+            target: 'https://raw.githubusercontent.com/glidea/banana-prompt-quicker/main',
+            changeOrigin: true,
+            rewrite: (path) => path.replace(/^\/api\/prompts/, '/prompts.json')
+          }
+        }
       },
       plugins: [
         preact(),

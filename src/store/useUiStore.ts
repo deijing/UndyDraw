@@ -21,6 +21,7 @@ interface UiState {
   toasts: Toast[];
   dialog: DialogOptions | null;
   isPromptLibraryOpen: boolean;
+  isBatchPanelOpen: boolean;
 
   addToast: (message: string, type?: ToastType) => void;
   removeToast: (id: string) => void;
@@ -28,12 +29,15 @@ interface UiState {
   closeDialog: () => void;
   togglePromptLibrary: () => void;
   closePromptLibrary: () => void;
+  toggleBatchPanel: () => void;
+  closeBatchPanel: () => void;
 }
 
 export const useUiStore = create<UiState>((set) => ({
   toasts: [],
   dialog: null,
   isPromptLibraryOpen: false,
+  isBatchPanelOpen: false,
 
   addToast: (message, type = 'info') => {
     const id = Date.now().toString();
@@ -62,4 +66,9 @@ export const useUiStore = create<UiState>((set) => ({
     set((state) => ({ isPromptLibraryOpen: !state.isPromptLibraryOpen })),
 
   closePromptLibrary: () => set({ isPromptLibraryOpen: false }),
+
+  toggleBatchPanel: () =>
+    set((state) => ({ isBatchPanelOpen: !state.isBatchPanelOpen })),
+
+  closeBatchPanel: () => set({ isBatchPanelOpen: false }),
 }));

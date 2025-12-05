@@ -61,19 +61,33 @@ export const createThumbnail = (base64Data: string, mimeType: string, maxWidth: 
  * @param filename 可选的文件名，如果不提供则自动生成
  */
 export const downloadImage = (mimeType: string, base64Data: string, filename?: string) => {
+  // 检查是否是URL
+  if (base64Data.startsWith('http://') || base64Data.startsWith('https://')) {
+    // 直接下载URL图片
+    const link = document.createElement('a');
+    link.href = base64Data;
+    link.download = filename || `gemini-image-${Date.now()}.jpg`;
+    link.target = '_blank'; // 如果无法下载则在新窗口打开
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    return;
+  }
+
+  // Base64 格式处理
   const blob = base64ToBlob(base64Data, mimeType);
   const url = URL.createObjectURL(blob);
 
   const link = document.createElement('a');
   link.href = url;
-  
+
   if (filename) {
     link.download = filename;
   } else {
     const extension = mimeType.split('/')[1] || 'png';
     link.download = `gemini-image-${Date.now()}.${extension}`;
   }
-  
+
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
@@ -87,10 +101,46 @@ export const downloadImage = (mimeType: string, base64Data: string, filename?: s
  * @param base64Data 图片的 Base64 数据
  */
 export const openImageInNewTab = (mimeType: string, base64Data: string) => {
+  // 检查是否是URL
+  if (base64Data.startsWith('http://') || base64Data.startsWith('https://')) {
+    // 直接打开URL
+    window.open(base64Data, '_blank');
+    return;
+  }
+
+  // Base64 格式处理
   const blob = base64ToBlob(base64Data, mimeType);
   const url = URL.createObjectURL(blob);
   window.open(url, '_blank');
-  
+
   // 延长 revoke 时间以确保图片在新标签页加载完成
   setTimeout(() => URL.revokeObjectURL(url), 60000);
+};
+
+/**
+ * 将 URL 图片转换为 Base64
+ * @param url 图片 URL
+ * @returns Promise<{ data: string; mimeType: string } | null>
+ */
+export const fetchImageAsBase64 = async (url: string): Promise<{ data: string; mimeType: string } | null> => {
+  try {
+    const response = await fetch(url);
+    if (!response.ok) return null;
+
+    const blob = await response.blob();
+    const mimeType = blob.type || 'image/jpeg';
+
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64 = (reader.result as string).split(',')[1];
+        resolve({ data: base64, mimeType });
+      };
+      reader.onerror = () => resolve(null);
+      reader.readAsDataURL(blob);
+    });
+  } catch (error) {
+    console.error('Failed to fetch image:', url, error);
+    return null;
+  }
 };

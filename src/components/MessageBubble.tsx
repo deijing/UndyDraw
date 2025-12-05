@@ -16,6 +16,20 @@ interface Props {
   onRegenerate: (id: string) => void;
 }
 
+// Helper to get image src from Part
+const getImageSrc = (part: Part): string => {
+  if (!part.inlineData) return '';
+  const { mimeType, data } = part.inlineData;
+
+  // 检查是否是URL
+  if (data.startsWith('http://') || data.startsWith('https://')) {
+    return data; // 直接返回URL
+  }
+
+  // Base64 格式
+  return `data:${mimeType};base64,${data}`;
+};
+
 const ThinkingContentItem: React.FC<{ part: Part }> = ({ part }) => {
   const [isImageHovered, setIsImageHovered] = useState(false);
 
@@ -44,7 +58,7 @@ const ThinkingContentItem: React.FC<{ part: Part }> = ({ part }) => {
             onMouseLeave={() => setIsImageHovered(false)}
         >
           <img
-            src={`data:${part.inlineData.mimeType};base64,${part.inlineData.data}`}
+            src={getImageSrc(part)}
             alt="Thinking process sketch"
             className="h-auto max-w-full object-contain opacity-80 hover:opacity-100 transition cursor-pointer"
             loading="lazy"
@@ -85,7 +99,7 @@ const ImageWithDownload: React.FC<{ part: Part; index: number }> = ({ part, inde
       onMouseLeave={() => setIsImageHovered(false)}
     >
       <img
-        src={`data:${part.inlineData.mimeType};base64,${part.inlineData.data}`}
+        src={getImageSrc(part)}
         alt="Generated or uploaded content"
         className="h-auto max-w-full object-contain cursor-pointer"
         loading="lazy"

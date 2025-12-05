@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage, StateStorage } from 'zustand/middleware';
 import { get as getVal, set as setVal, del as delVal } from 'idb-keyval';
 import { fetchBalance, BalanceInfo } from '../services/balanceService';
-import { AppSettings, ChatMessage, Part, ImageHistoryItem, GenerationProgress } from '../types';
+import { AppSettings, ChatMessage, Part, ImageHistoryItem, GenerationProgress, ApiProvider } from '../types';
 import { createThumbnail } from '../utils/imageUtils';
 
 // Custom IndexedDB storage
@@ -29,6 +29,7 @@ interface AppState {
   balance: BalanceInfo | null;
   installPrompt: any | null; // PWA Install Prompt Event
   generationProgress: GenerationProgress;
+  apiProviders: ApiProvider[]; // API 供应商列表
 
   setInstallPrompt: (prompt: any) => void;
   setApiKey: (key: string) => void;
@@ -49,6 +50,13 @@ interface AppState {
   sliceMessages: (index: number) => void;
   setGenerationProgress: (progress: Partial<GenerationProgress>) => void;
   resetGenerationProgress: () => void;
+
+  // API Provider management
+  addApiProvider: (provider: Omit<ApiProvider, 'id'>) => void;
+  updateApiProvider: (id: string, updates: Partial<ApiProvider>) => void;
+  deleteApiProvider: (id: string) => void;
+  switchApiProvider: (id: string) => void;
+  getActiveProvider: () => ApiProvider | null;
 }
 
 export const useAppStore = create<AppState>()(
@@ -58,6 +66,7 @@ export const useAppStore = create<AppState>()(
       settings: {
         resolution: '1K',
         aspectRatio: 'Auto',
+        imageCount: 1, // 默认生成1张图片
         useGrounding: false,
         enableThinking: true,
         streamResponse: true,
@@ -81,6 +90,7 @@ export const useAppStore = create<AppState>()(
         mode: null,
         status: 'idle',
       },
+      apiProviders: [],
 
       setInstallPrompt: (prompt) => set({ installPrompt: prompt }),
       setApiKey: (key) => set({ apiKey: key }),
@@ -290,6 +300,102 @@ export const useAppStore = create<AppState>()(
             status: 'idle',
           },
         }),
+
+      // API Provider management
+      addApiProvider: (provider) =>
+        set((state) => {
+          const isFirstProvider = state.apiProviders.length === 0;
+          const newProvider: ApiProvider = {
+            ...provider,
+            id: `provider-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            isActive: isFirstProvider, // 第一个自动激活
+          };
+
+          // 如果是第一个供应商，同时更新全局配置
+          if (isFirstProvider) {
+            return {
+              apiProviders: [...state.apiProviders, newProvider],
+              apiKey: newProvider.apiKey,
+              settings: {
+                ...state.settings,
+                customEndpoint: newProvider.endpoint,
+                modelName: newProvider.modelName || state.settings.modelName,
+              },
+            };
+          }
+
+          return { apiProviders: [...state.apiProviders, newProvider] };
+        }),
+
+      updateApiProvider: (id, updates) =>
+        set((state) => {
+          const provider = state.apiProviders.find((p) => p.id === id);
+          const isActive = provider?.isActive || false;
+
+          const updatedProviders = state.apiProviders.map((p) =>
+            p.id === id ? { ...p, ...updates } : p
+          );
+
+          // 如果更新的是当前激活的供应商，同时更新全局配置
+          if (isActive) {
+            const updatedProvider = updatedProviders.find((p) => p.id === id)!;
+            return {
+              apiProviders: updatedProviders,
+              apiKey: updatedProvider.apiKey,
+              settings: {
+                ...state.settings,
+                customEndpoint: updatedProvider.endpoint,
+                modelName: updatedProvider.modelName || state.settings.modelName,
+              },
+            };
+          }
+
+          return { apiProviders: updatedProviders };
+        }),
+
+      deleteApiProvider: (id) =>
+        set((state) => {
+          const providers = state.apiProviders.filter((p) => p.id !== id);
+          // 如果删除的是激活的，激活第一个
+          if (state.apiProviders.find((p) => p.id === id)?.isActive && providers.length > 0) {
+            providers[0].isActive = true;
+            const firstProvider = providers[0];
+            return {
+              apiProviders: providers,
+              apiKey: firstProvider.apiKey,
+              settings: {
+                ...state.settings,
+                customEndpoint: firstProvider.endpoint,
+                modelName: firstProvider.modelName || state.settings.modelName,
+              },
+            };
+          }
+          return { apiProviders: providers };
+        }),
+
+      switchApiProvider: (id) =>
+        set((state) => {
+          const provider = state.apiProviders.find((p) => p.id === id);
+          if (!provider) return {};
+
+          return {
+            apiProviders: state.apiProviders.map((p) => ({
+              ...p,
+              isActive: p.id === id,
+            })),
+            apiKey: provider.apiKey,
+            settings: {
+              ...state.settings,
+              customEndpoint: provider.endpoint,
+              modelName: provider.modelName || state.settings.modelName,
+            },
+          };
+        }),
+
+      getActiveProvider: () => {
+        const { apiProviders } = get();
+        return apiProviders.find((p) => p.isActive) || null;
+      },
     }),
     {
       name: 'gemini-pro-storage',
@@ -298,6 +404,7 @@ export const useAppStore = create<AppState>()(
         apiKey: state.apiKey,
         settings: state.settings,
         imageHistory: state.imageHistory, // 持久化图片历史记录
+        apiProviders: state.apiProviders, // 持久化供应商列表
       }),
     }
   )

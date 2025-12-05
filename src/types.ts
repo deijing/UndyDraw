@@ -1,6 +1,16 @@
+export interface ApiProvider {
+  id: string;
+  name: string;
+  endpoint: string;
+  apiKey: string;
+  modelName?: string;
+  isActive: boolean;
+}
+
 export interface AppSettings {
   resolution: '1K' | '2K' | '4K';
   aspectRatio: 'Auto' | '1:1' | '3:4' | '4:3' | '9:16' | '16:9';
+  imageCount: number; // 一次生成图片的数量，默认为1
   useGrounding: boolean;
   enableThinking: boolean;
   streamResponse: boolean;
@@ -19,6 +29,7 @@ export interface Part {
   };
   thought?: boolean;
   thoughtSignature?: string;
+  prompt?: string; // 用于批量生成时标记每张图的提示词
 }
 
 export interface Content {

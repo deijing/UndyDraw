@@ -2,11 +2,12 @@ import React, { useRef, useEffect, useState, Suspense } from 'react';
 import { useAppStore } from '../store/useAppStore';
 import { InputArea } from './InputArea';
 import { ErrorBoundary } from './ErrorBoundary';
-import { streamGeminiResponse, generateContent } from '../services/geminiService';
+import { streamGeminiResponse, generateContent, generateContentBatch } from '../services/geminiService';
 import { convertMessagesToHistory } from '../utils/messageUtils';
 import { ChatMessage, Attachment, Part } from '../types';
 import { Sparkles } from 'lucide-react';
 import { lazyWithRetry } from '../utils/lazyLoadUtils';
+import { fetchImageAsBase64 } from '../utils/imageUtils';
 
 // Lazy load components
 const ThinkingIndicator = lazyWithRetry(() => import('./ThinkingIndicator').then(m => ({ default: m.ThinkingIndicator })));
@@ -218,12 +219,16 @@ export const ChatInterface: React.FC = () => {
       let thinkingDuration = 0;
       let isThinking = false;
 
-      if (settings.streamResponse) {
+      // 多图模式：强制使用非流式并发生成
+      const shouldUseBatch = settings.imageCount > 1;
+      const useStreaming = settings.streamResponse && !shouldUseBatch;
+
+      if (useStreaming) {
           // 启动流式进度
           startStreamProgress(jobId, modelMessageId);
           const stream = streamGeminiResponse(
             apiKey,
-            history, 
+            history,
             text,
             imagesPayload,
             settings,
@@ -246,7 +251,7 @@ export const ChatInterface: React.FC = () => {
 
               updateLastMessage(chunk.modelParts, false, isThinking ? thinkingDuration : undefined);
           }
-          
+
           // Final update to ensure duration is set if ended while thinking (unlikely but possible)
           // or to set the final duration if the whole response was a thought
           if (isThinking) {
@@ -259,14 +264,26 @@ export const ChatInterface: React.FC = () => {
       } else {
           // 启动非流式进度
           startNonStreamProgress(jobId, modelMessageId);
-          const result = await generateContent(
-            apiKey,
-            history, 
-            text,
-            imagesPayload,
-            settings,
-            abortControllerRef.current.signal
-          );
+
+          // 使用并发生成（如果 imageCount > 1）或普通生成
+          const result = shouldUseBatch
+            ? await generateContentBatch(
+                apiKey,
+                history,
+                text,
+                imagesPayload,
+                settings,
+                settings.imageCount,
+                abortControllerRef.current.signal
+              )
+            : await generateContent(
+                apiKey,
+                history,
+                text,
+                imagesPayload,
+                settings,
+                abortControllerRef.current.signal
+              );
 
           // Calculate thinking duration for non-streaming response
           let totalDuration = (Date.now() - startTime) / 1000;
@@ -276,7 +293,7 @@ export const ChatInterface: React.FC = () => {
           // The UI expects thinkingDuration to show beside the "Thinking Process" block.
           // If we have thought parts, we can pass the total duration as a fallback, or 0 if we don't want to guess.
           // However, existing UI logic in MessageBubble uses `thinkingDuration` prop on the message.
-          
+
           const hasThought = result.modelParts.some(p => p.thought);
           updateLastMessage(result.modelParts, false, hasThought ? totalDuration : undefined);
 
@@ -288,18 +305,64 @@ export const ChatInterface: React.FC = () => {
       const finalMessage = useAppStore.getState().messages.slice(-1)[0];
       if (finalMessage && finalMessage.role === 'model') {
         const imageParts = finalMessage.parts.filter(p => p.inlineData && !p.thought);
-        imageParts.forEach(part => {
-          if (part.inlineData) {
-            addImageToHistory({
+
+        // 使用 Promise.all 并行处理所有图片
+        console.log('[图片历史] 检测到', imageParts.length, '个图片部分');
+
+        const savePromises = imageParts.map(async (part) => {
+          if (!part.inlineData) {
+            console.log('[图片历史] 跳过：没有 inlineData');
+            return;
+          }
+
+          let base64Data = part.inlineData.data;
+          let mimeType = part.inlineData.mimeType;
+
+          console.log('[图片历史] 处理图片:', base64Data.substring(0, 50) + '...');
+
+          // 如果是 URL，先转换为 base64
+          if (base64Data.startsWith('http://') || base64Data.startsWith('https://')) {
+            try {
+              console.log('[图片历史] 开始转换 URL 图片:', base64Data);
+              const converted = await fetchImageAsBase64(base64Data);
+              if (converted) {
+                base64Data = converted.data;
+                mimeType = converted.mimeType;
+                console.log('[图片历史] URL 转换成功，base64 长度:', base64Data.length);
+              } else {
+                console.warn('[图片历史] URL 转换失败，跳过保存:', base64Data);
+                return;
+              }
+            } catch (error) {
+              console.error('[图片历史] URL 转换出错:', error);
+              return;
+            }
+          }
+
+          console.log('[图片历史] 准备保存图片到历史记录');
+          try {
+            await addImageToHistory({
               id: `img-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-              mimeType: part.inlineData.mimeType,
-              base64Data: part.inlineData.data,
+              mimeType,
+              base64Data,
               prompt: text || '图片生成',
               timestamp: Date.now(),
               modelName: settings.modelName,
             });
+            console.log('[图片历史] ✓ 图片保存成功');
+          } catch (error) {
+            console.error('[图片历史] ✗ 图片保存失败:', error);
+            throw error;
           }
         });
+
+        // 等待所有图片保存完成
+        try {
+          await Promise.all(savePromises);
+          console.log('[图片历史] ✓ 所有图片保存完成');
+        } catch (err) {
+          console.error('[图片历史] ✗ 保存图片过程中出错:', err);
+        }
       }
 
     } catch (error: any) {
