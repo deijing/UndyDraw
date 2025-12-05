@@ -5,18 +5,18 @@ import { ChatInterface } from './components/ChatInterface';
 import { ToastContainer } from './components/ui/ToastContainer';
 import { GlobalDialog } from './components/ui/GlobalDialog';
 import { formatBalance } from './services/balanceService';
-import { Settings, Sun, Moon, Github, ImageIcon, DollarSign, Download, Sparkles } from 'lucide-react';
+import { Settings, Sun, Moon, Github, ImageIcon, DollarSign, Download, Sparkles, Zap } from 'lucide-react';
 import { lazyWithRetry, preloadComponents } from './utils/lazyLoadUtils';
 
 // Lazy load components
-const ApiKeyModal = lazyWithRetry(() => import('./components/ApiKeyModal').then(module => ({ default: module.ApiKeyModal })));
 const SettingsPanel = lazyWithRetry(() => import('./components/SettingsPanel').then(module => ({ default: module.SettingsPanel })));
 const ImageHistoryPanel = lazyWithRetry(() => import('./components/ImageHistoryPanel').then(module => ({ default: module.ImageHistoryPanel })));
 const PromptLibraryPanel = lazyWithRetry(() => import('./components/PromptLibraryPanel').then(module => ({ default: module.PromptLibraryPanel })));
+const BatchGenerationPanel = lazyWithRetry(() => import('./components/BatchGenerationPanel').then(module => ({ default: module.BatchGenerationPanel })));
 
 const App: React.FC = () => {
   const { apiKey, setApiKey, settings, updateSettings, isSettingsOpen, toggleSettings, imageHistory, balance, fetchBalance, installPrompt, setInstallPrompt } = useAppStore();
-  const { togglePromptLibrary, isPromptLibraryOpen, showDialog, addToast } = useUiStore();
+  const { togglePromptLibrary, isPromptLibraryOpen, toggleBatchPanel, isBatchPanelOpen, showDialog, addToast } = useUiStore();
 
   useEffect(() => {
     const handleBeforeInstallPrompt = (e: Event) => {
@@ -55,7 +55,6 @@ const App: React.FC = () => {
   // Preload components after mount
   useEffect(() => {
     preloadComponents([
-      () => import('./components/ApiKeyModal'),
       () => import('./components/SettingsPanel'),
       () => import('./components/ImageHistoryPanel'),
       () => import('./components/PromptLibraryPanel'),
@@ -233,6 +232,17 @@ const App: React.FC = () => {
               <Sparkles className="h-6 w-6" />
             </button>
             <button
+              onClick={toggleBatchPanel}
+              className={`rounded-lg p-2 transition focus:outline-none focus:ring-2 focus:ring-amber-500 ${
+                isBatchPanelOpen
+                  ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400'
+                  : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white'
+              }`}
+              title="批量生成"
+            >
+              <Zap className="h-6 w-6" />
+            </button>
+            <button
               onClick={() => updateSettings({ theme: settings.theme === 'dark' ? 'light' : 'dark' })}
               className="rounded-lg p-2 text-gray-500 dark:text-gray-400 transition hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
               title="切换主题"
@@ -304,11 +314,11 @@ const App: React.FC = () => {
 
       {/* Modals */}
       <Suspense fallback={null}>
-        {!apiKey && <ApiKeyModal />}
         {isImageHistoryOpen && (
           <ImageHistoryPanel isOpen={isImageHistoryOpen} onClose={() => setIsImageHistoryOpen(false)} />
         )}
         <PromptLibraryPanel />
+        <BatchGenerationPanel />
       </Suspense>
       <ToastContainer />
       <GlobalDialog />
