@@ -4,6 +4,7 @@ export interface ApiProvider {
   endpoint: string;
   apiKey: string;
   modelName?: string;
+  channel?: 'vertex-ai' | 'cli-reverse' | 'google-ai-studio'; // 渠道类型
   isActive: boolean;
 }
 

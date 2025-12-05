@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAppStore } from '../store/useAppStore';
 import { useUiStore } from '../store/useUiStore';
-import { X, LogOut, Trash2, Share2, Bookmark, DollarSign, RefreshCw, Download, Zap, Plus, Check, Edit2, Server, Eye, EyeOff, Key } from 'lucide-react';
+import { X, LogOut, Trash2, Share2, Bookmark, DollarSign, RefreshCw, Download, Zap, Plus, Check, Edit2, Server, Eye, EyeOff, Key, ChevronDown, ChevronUp } from 'lucide-react';
 import { formatBalance } from '../services/balanceService';
 import { fetchModels, ModelInfo } from '../services/modelService';
 
@@ -37,10 +37,12 @@ export const SettingsPanel: React.FC = () => {
     endpoint: '',
     apiKey: '',
     modelName: '',
+    channel: '' as '' | 'vertex-ai' | 'cli-reverse' | 'google-ai-studio',
   });
   const [providerModels, setProviderModels] = useState<ModelInfo[]>([]);
   const [loadingProviderModels, setLoadingProviderModels] = useState(false);
   const [showApiKey, setShowApiKey] = useState(false);
+  const [isProvidersExpanded, setIsProvidersExpanded] = useState(true); // 供应商列表折叠状态
   
   const handleInstallClick = async () => {
     if (!installPrompt) return;
@@ -153,7 +155,7 @@ export const SettingsPanel: React.FC = () => {
     }
 
     // 重置表单
-    setProviderForm({ name: '', endpoint: '', apiKey: '', modelName: '' });
+    setProviderForm({ name: '', endpoint: '', apiKey: '', modelName: '', channel: '' });
     setProviderModels([]);
     setShowProviderForm(false);
     setEditingProviderId(null);
@@ -167,6 +169,7 @@ export const SettingsPanel: React.FC = () => {
         endpoint: provider.endpoint,
         apiKey: provider.apiKey,
         modelName: provider.modelName || '',
+        channel: provider.channel || '',
       });
       setEditingProviderId(id);
       setProviderModels([]); // 清空模型列表，需要重新加载
@@ -235,29 +238,66 @@ export const SettingsPanel: React.FC = () => {
       <div className="space-y-8 flex-1">
         {/* API Providers Section */}
         <section className="p-4 rounded-xl bg-gradient-to-br from-green-50 to-teal-50 dark:from-green-900/20 dark:to-teal-900/20 border border-green-200 dark:border-green-800">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <Server className="h-5 w-5 text-green-600 dark:text-green-400" />
-              <h3 className="text-sm font-semibold text-gray-900 dark:text-white">API 供应商</h3>
+          <div className="mb-3">
+            <div className="flex items-center justify-between">
+              <button
+                onClick={() => setIsProvidersExpanded(!isProvidersExpanded)}
+                className="flex items-center gap-2 hover:opacity-70 transition flex-1"
+              >
+                <Server className="h-5 w-5 text-green-600 dark:text-green-400" />
+                <h3 className="text-sm font-semibold text-gray-900 dark:text-white">
+                  API 供应商 {apiProviders.length > 0 && `(${apiProviders.length})`}
+                </h3>
+                {isProvidersExpanded ? (
+                  <ChevronUp className="h-4 w-4 text-gray-500 dark:text-gray-400" />
+                ) : (
+                  <ChevronDown className="h-4 w-4 text-gray-500 dark:text-gray-400" />
+                )}
+              </button>
+              <button
+                onClick={() => {
+                  setShowProviderForm(!showProviderForm);
+                  if (!showProviderForm) {
+                    setProviderForm({ name: '', endpoint: '', apiKey: '', modelName: '', channel: '' });
+                    setEditingProviderId(null);
+                    setProviderModels([]);
+                  }
+                }}
+                className="p-1.5 rounded-lg hover:bg-green-100 dark:hover:bg-green-800/30 text-green-600 dark:text-green-400 transition"
+                title="添加供应商"
+              >
+                <Plus className="h-4 w-4" />
+              </button>
             </div>
-            <button
-              onClick={() => {
-                setShowProviderForm(!showProviderForm);
-                if (!showProviderForm) {
-                  setProviderForm({ name: '', endpoint: '', apiKey: '', modelName: '' });
-                  setEditingProviderId(null);
-                  setProviderModels([]);
-                }
-              }}
-              className="p-1.5 rounded-lg hover:bg-green-100 dark:hover:bg-green-800/30 text-green-600 dark:text-green-400 transition"
-              title="添加供应商"
-            >
-              <Plus className="h-4 w-4" />
-            </button>
+
+            {/* 折叠时显示当前供应商 */}
+            {!isProvidersExpanded && apiProviders.length > 0 && (() => {
+              const activeProvider = apiProviders.find(p => p.isActive);
+              return activeProvider ? (
+                <div className="mt-2 p-2 rounded-lg bg-green-100 dark:bg-green-800/30 border border-green-500">
+                  <div className="flex items-center gap-2">
+                    <Check className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
+                    <span className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                      {activeProvider.name}
+                    </span>
+                    {activeProvider.channel && (
+                      <span className="text-xs px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400">
+                        {activeProvider.channel === 'vertex-ai' && 'Vertex AI'}
+                        {activeProvider.channel === 'cli-reverse' && 'CLI逆向'}
+                        {activeProvider.channel === 'google-ai-studio' && 'AI Studio'}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-gray-600 dark:text-gray-400 truncate mt-0.5">
+                    {activeProvider.endpoint}
+                  </p>
+                </div>
+              ) : null;
+            })()}
           </div>
 
           {/* Provider List */}
-          {apiProviders.length > 0 && (
+          {isProvidersExpanded && apiProviders.length > 0 && (
             <div className="space-y-2 mb-3">
               {apiProviders.map((provider) => (
                 <div
@@ -276,6 +316,13 @@ export const SettingsPanel: React.FC = () => {
                       <span className="text-sm font-medium text-gray-900 dark:text-white truncate">
                         {provider.name}
                       </span>
+                      {provider.channel && (
+                        <span className="text-xs px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400">
+                          {provider.channel === 'vertex-ai' && 'Vertex AI'}
+                          {provider.channel === 'cli-reverse' && 'CLI逆向'}
+                          {provider.channel === 'google-ai-studio' && 'AI Studio'}
+                        </span>
+                      )}
                     </div>
                     <p className="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">
                       {provider.endpoint}
@@ -316,14 +363,14 @@ export const SettingsPanel: React.FC = () => {
             <div className="space-y-3 mt-3 p-3 rounded-lg bg-white/50 dark:bg-gray-900/30 border border-gray-200 dark:border-gray-700">
               <input
                 type="text"
-                placeholder="供应商名称 (例如: Undy API)"
+                placeholder="供应商名称 (例如: IkunCode)"
                 value={providerForm.name}
                 onChange={(e) => setProviderForm({ ...providerForm, name: e.target.value })}
                 className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm"
               />
               <input
                 type="text"
-                placeholder="API 端点 (例如: https://api.example.com)"
+                placeholder="API 端点 (例如: https://api.ikuncode.cc)"
                 value={providerForm.endpoint}
                 onChange={(e) => setProviderForm({ ...providerForm, endpoint: e.target.value })}
                 className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm"
@@ -335,6 +382,21 @@ export const SettingsPanel: React.FC = () => {
                 onChange={(e) => setProviderForm({ ...providerForm, apiKey: e.target.value })}
                 className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm"
               />
+
+              {/* Channel Selection */}
+              <div>
+                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">渠道 (可选)</label>
+                <select
+                  value={providerForm.channel}
+                  onChange={(e) => setProviderForm({ ...providerForm, channel: e.target.value as any })}
+                  className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm"
+                >
+                  <option value="">不指定渠道</option>
+                  <option value="vertex-ai">Vertex AI</option>
+                  <option value="cli-reverse">CLI 逆向</option>
+                  <option value="google-ai-studio">Google AI Studio</option>
+                </select>
+              </div>
 
               {/* Model Selection */}
               <div>
@@ -391,7 +453,7 @@ export const SettingsPanel: React.FC = () => {
                   onClick={() => {
                     setShowProviderForm(false);
                     setEditingProviderId(null);
-                    setProviderForm({ name: '', endpoint: '', apiKey: '', modelName: '' });
+                    setProviderForm({ name: '', endpoint: '', apiKey: '', modelName: '', channel: '' });
                     setProviderModels([]);
                   }}
                   className="px-3 py-2 rounded-lg bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 text-sm font-medium transition"
@@ -460,30 +522,40 @@ export const SettingsPanel: React.FC = () => {
           </section>
         )}
 
-        {/* Pro Mode Toggle */}
-        <section>
-          <label className="flex items-center justify-between cursor-pointer group">
-            <div className="flex items-center gap-2">
-                <Zap className={`h-4 w-4 ${settings.isPro ? 'text-amber-500' : 'text-gray-400'}`} />
-                <span className="text-sm font-medium text-gray-500 dark:text-gray-400 group-hover:text-gray-700 dark:group-hover:text-gray-300">Pro 模式</span>
-            </div>
-            <div className="relative">
-              <input
-                type="checkbox"
-                checked={settings.isPro}
-                onChange={(e) => updateSettings({ isPro: (e.target as HTMLInputElement).checked })}
-                className="sr-only peer"
-              />
-              <div className="h-6 w-11 rounded-full bg-gray-200 dark:bg-gray-800 peer-focus:ring-2 peer-focus:ring-blue-500/50 peer-checked:bg-blue-600 transition-colors after:absolute after:left-0.5 after:top-0.5 after:h-5 after:w-5 after:rounded-full after:bg-white after:transition-all after:content-[''] peer-checked:after:translate-x-full"></div>
-            </div>
-          </label>
-          <p className="mt-2 text-xs text-gray-400 dark:text-gray-500">
-            启用高级功能，包括高分辨率图像、Google 搜索定位和思考过程。
-          </p>
-        </section>
+        {/* Pro Mode Toggle - 根据渠道类型决定是否显示 */}
+        {(() => {
+          const activeProvider = apiProviders.find(p => p.isActive);
+          const shouldShowProMode = !activeProvider?.channel || activeProvider.channel !== 'cli-reverse';
 
-        {/* Pro Features Group */}
-        {settings.isPro && (
+          if (!shouldShowProMode) {
+            return null;
+          }
+
+          return (
+            <>
+              <section>
+                <label className="flex items-center justify-between cursor-pointer group">
+                  <div className="flex items-center gap-2">
+                      <Zap className={`h-4 w-4 ${settings.isPro ? 'text-amber-500' : 'text-gray-400'}`} />
+                      <span className="text-sm font-medium text-gray-500 dark:text-gray-400 group-hover:text-gray-700 dark:group-hover:text-gray-300">Pro 模式</span>
+                  </div>
+                  <div className="relative">
+                    <input
+                      type="checkbox"
+                      checked={settings.isPro}
+                      onChange={(e) => updateSettings({ isPro: (e.target as HTMLInputElement).checked })}
+                      className="sr-only peer"
+                    />
+                    <div className="h-6 w-11 rounded-full bg-gray-200 dark:bg-gray-800 peer-focus:ring-2 peer-focus:ring-blue-500/50 peer-checked:bg-blue-600 transition-colors after:absolute after:left-0.5 after:top-0.5 after:h-5 after:w-5 after:rounded-full after:bg-white after:transition-all after:content-[''] peer-checked:after:translate-x-full"></div>
+                  </div>
+                </label>
+                <p className="mt-2 text-xs text-gray-400 dark:text-gray-500">
+                  启用高级功能，包括高分辨率图像、Google 搜索定位和思考过程。
+                </p>
+              </section>
+
+              {/* Pro Features Group */}
+              {settings.isPro && (
           <div className="space-y-8 animate-in fade-in slide-in-from-top-4 duration-300">
             {/* Resolution */}
             <section className="mb-4">
@@ -647,7 +719,10 @@ export const SettingsPanel: React.FC = () => {
               </p>
             </section>
           </div>
-        )}
+              )}
+            </>
+          );
+        })()}
 
         {/* Streaming */}
         <section>
