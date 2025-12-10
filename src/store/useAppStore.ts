@@ -70,7 +70,7 @@ export const useAppStore = create<AppState>()(
         useGrounding: false,
         enableThinking: true,
         streamResponse: true,
-        customEndpoint: 'https://undyapi.com',
+        customEndpoint: 'https://api.ikuncode.cc',
         modelName: 'gemini-3-pro-image-preview',
         theme: 'system',
         isPro: true,

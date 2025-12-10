@@ -309,6 +309,9 @@ export const ChatInterface: React.FC = () => {
         // 使用 Promise.all 并行处理所有图片
         console.log('[图片历史] 检测到', imageParts.length, '个图片部分');
 
+        // 记录URL到base64的转换结果，用于更新消息
+        const conversions = new Map<Part, { mimeType: string; data: string }>();
+
         const savePromises = imageParts.map(async (part) => {
           if (!part.inlineData) {
             console.log('[图片历史] 跳过：没有 inlineData');
@@ -317,6 +320,7 @@ export const ChatInterface: React.FC = () => {
 
           let base64Data = part.inlineData.data;
           let mimeType = part.inlineData.mimeType;
+          const originalUrl = base64Data;
 
           console.log('[图片历史] 处理图片:', base64Data.substring(0, 50) + '...');
 
@@ -329,6 +333,9 @@ export const ChatInterface: React.FC = () => {
                 base64Data = converted.data;
                 mimeType = converted.mimeType;
                 console.log('[图片历史] URL 转换成功，base64 长度:', base64Data.length);
+
+                // 记录转换结果
+                conversions.set(part, { mimeType, data: base64Data });
               } else {
                 console.warn('[图片历史] URL 转换失败，跳过保存:', base64Data);
                 return;
@@ -360,6 +367,27 @@ export const ChatInterface: React.FC = () => {
         try {
           await Promise.all(savePromises);
           console.log('[图片历史] ✓ 所有图片保存完成');
+
+          // 如果有URL转base64的转换，更新消息中的图片数据，避免后续渲染继续走URL慢加载
+          if (conversions.size > 0) {
+            console.log('[图片历史] 更新消息中的', conversions.size, '个URL图片为base64');
+            const updatedParts = modelParts.map(part => {
+              const conversion = conversions.get(part);
+              if (conversion) {
+                return {
+                  ...part,
+                  inlineData: {
+                    mimeType: conversion.mimeType,
+                    data: conversion.data
+                  }
+                };
+              }
+              return part;
+            });
+
+            // 更新最后一条消息
+            updateLastMessage(updatedParts, false);
+          }
         } catch (err) {
           console.error('[图片历史] ✗ 保存图片过程中出错:', err);
         }
